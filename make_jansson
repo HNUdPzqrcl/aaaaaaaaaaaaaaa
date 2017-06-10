@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Return of 3 means that jansson has already been installed,
+# return of 2 means trivial error,
+# return of 1 means wget failed,
+# return of -1 means error verifying jansson-2.10.tar.gz
+function get_jansson()
+{
+	if ! [ -e /lib/libjansson.so -o -e /usr/lib/libjansson.so -o -e /usr/local/lib/libjansson.so ]; then
+		which wget >/dev/null 2>&1 &&
+		which gpg >/dev/null 2>&1 || return 2
+		if [ -e jansson_get ]; then
+			rm -rf jansson_get || return 2
+		fi
+		mkdir jansson_get >/dev/null 2>&1
+		cd jansson_get || return 2
+		# Wouldn't it be really funny if digip.org got hacked? Then this utility
+		# would potentially compromise the machine it runs on!
+		# ...I mean, not to be mean to Petri Lehtinen. It would be a shame if it
+		# were hacked.
+		wget www.digip.org/jansson/releases/jansson-2.10.tar.gz &&
+		wget www.digip.org/jansson/releases/jansson-2.10.tar.gz.asc &&
+		wget www.digip.org/files/pubkey.asc ||
+			(cd .. && rm -rf jansson_get ; return 1)
+
+		gpg --import pubkey.asc
+		gpg --verify jansson-2.10.tar.gz.asc jansson-2.10.tar.gz ||
+			(cd .. && rm -rf jansson_get ; return -1)
+
+		tar -xzvf jansson-2.10.tar.gz &&
+		mv jansson-2.10 ..
+
+		cd ..
+		rm -rf jansson_get
+	else
+		if ! [ -e /lib/libjansson.so -o -e /usr/lib/libjansson.so ]; then
+			sudo ln -s /usr/local/lib/libjansson.* /usr/lib
+		fi
+		echo "jansson is already installed"
+		return 3
+	fi
+}
+
+function make_jansson
+{
+	if [ ! -d jansson-2.10 ]; then return 1; fi
+	cd jansson-2.10 &&
+	chmod u+x configure &&
+	./configure &&
+	make &&
+	make check &&
+	sudo make install || return 1
+	sudo ln -s /usr/local/lib/libjansson.so.4 /usr/lib
+}
+
+get_jansson ||
+	ret=$? &&
+	if [ $ret -ne 3 ]; then
+		exit $?
+	else
+		exit 0
+	fi
+make_jansson || exit $?
